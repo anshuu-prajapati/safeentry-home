@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SafeEntry Home</title>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--ink:#e8eaf0;--mute:#8b91a1;--line:#2a2f3a;--ok:#3ecf8e;--warn:#f5a524;--bad:#f04438}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;margin:0}.pill{padding:4px 10px;border-radius:99px;font-weight:600;font-size:12px}
+main{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;padding:16px 20px}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
+.plan{display:grid;grid-template-columns:3fr 5fr;grid-template-rows:1fr 1fr;gap:6px;height:260px}
+.room{border:1px solid var(--line);border-radius:6px;padding:8px;position:relative;background:#12151b}
+.room b{font-size:12px;color:var(--mute)}.room .p{display:inline-block;margin:4px 4px 0 0;padding:2px 6px;border-radius:4px;font-size:12px}
+.room.prio{outline:2px solid var(--bad)}
+.plate{display:flex;height:70px;border-radius:8px;overflow:hidden;border:2px solid #333;margin-bottom:8px}
+.plate div{flex:1;transition:background .08s}
+button{background:#232836;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:3px;cursor:pointer}
+button:hover{border-color:#4a5163}
+#log{font:12px ui-monospace,monospace;max-height:260px;overflow:auto;white-space:pre-wrap;color:#c5cad6}
+input{width:100%;background:#12151b;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+</style>
+</head>
+<body>
+<header><h1>SafeEntry Home</h1><span id="st" class="pill">…</span><span id="em" class="pill"></span><span id="pat" style="color:var(--mute)"></span></header>
+<main>
+<section class="card"><h2>Home twin — 4 rooms</h2>
+  <div class="plan">
+    <div class="room" id="ENTRY_HALL" style="grid-row:1"><b>ENTRY HALL</b><div></div></div>
+    <div class="room" id="LIVING_ROOM" style="grid-row:1"><b>LIVING ROOM</b><div></div></div>
+    <div class="room" id="BEDROOM" style="grid-row:2"><b>BEDROOM</b><div></div></div>
+    <div class="room" id="KITCHEN" style="grid-row:2"><b>KITCHEN</b><div></div></div>
+  </div>
+  <p id="door" style="color:var(--mute)"></p>
+  <h2>Dispatch payload</h2><pre id="disp" style="font-size:12px;white-space:pre-wrap;color:#c5cad6">—</pre>
+</section>
+<section>
+  <div class="card"><h2>Door-plate beacon</h2><div class="plate"><div id="bl"></div><div id="br"></div></div></div>
+  <div class="card" style="margin-top:12px"><h2>Simulate</h2>
+    <button onclick="snd('KNOCK')">Knock</button><button onclick="snd('FORCED_ENTRY')">Forced entry</button>
+    <button onclick="snd('GLASS_BREAK')">Glass break</button><button onclick="snd('SOS_KNOCK')">SOS knock 3·3·3</button>
+    <button onclick="intr()">Intruder enters</button><br>
+    <button onclick="sos('MEDICAL')">SOS Medical</button><button onclick="sos('POLICE')">SOS Police</button><button onclick="sos('FIRE')">SOS Fire</button>
+    <button onclick="post('/resolve')">Resolve</button><button onclick="post('/reset')">Reset</button>
+    <div style="margin-top:8px"><input id="tx" placeholder="Call transcript, e.g. 'papa fell down, call an ambulance'" onkeydown="if(event.key==='Enter')call()"></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h2>Event log</h2><div id="log"></div></div>
+</section>
+</main>
+<script>
+const col={IDLE:'#3a3f4b',WATCH:'#f5a524',INTRUSION:'#f04438',EMERGENCY:'#b42318'};
+let S=null,t0=performance.now();
+async function post(u,b){const r=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:b?JSON.stringify(b):undefined});await poll();return r.json()}
+const snd=l=>post('/simulate/sound/'+l+'?seed='+Math.floor(Math.random()*99));
+const sos=t=>post('/sos',{type:t,source:'dashboard'});
+const intr=()=>post('/simulate/person',{pid:'x'+Date.now()%1000,room:'LIVING_ROOM',role:'intruder'});
+const call=()=>{const v=document.getElementById('tx').value;if(v)post('/call/detect',{transcript:v})};
+function beacon(t){ if(!S)return['#333','#333'];const st=S.state,em=S.emergency;const on=f=>(t*f)%1<.5;
+  if(st==='EMERGENCY'){if(em==='MEDICAL')return on(2)?['red','red']:['#111','#111'];
+    if(em==='POLICE')return on(2.5)?['red','#111']:['#111','#0050ff'];if(em==='FIRE')return on(3)?['#ff6e00','#ff6e00']:['#fff','#fff']}
+  if(st==='INTRUSION')return on(5)?['red','red']:['#fff','#fff'];
+  if(st==='WATCH'){const k=.35+.65*(.5+.5*Math.sin(Math.PI*t));return Array(2).fill(`rgba(255,170,0,${k})`)}
+  return['#3c3c3c','#3c3c3c']}
+function frame(){const t=(performance.now()-t0)/1000,[l,r]=beacon(t);bl.style.background=l;br.style.background=r;requestAnimationFrame(frame)}
+async function poll(){S=await (await fetch('/state')).json();
+  st.textContent=S.state;st.style.background=col[S.state];em.textContent=S.emergency!=='NONE'?S.emergency:'';em.style.background=S.emergency!=='NONE'?'#344':'';
+  pat.textContent='plate: '+S.beacon.pattern;
+  for(const r of ['ENTRY_HALL','LIVING_ROOM','BEDROOM','KITCHEN']){const el=document.getElementById(r);
+    el.querySelector('div').innerHTML=S.people.filter(p=>p.room===r).map(p=>`<span class="p" style="background:${p.role==='intruder'?'#7a1f1f':'#1f5a3a'}">${p.pid}${p.posture==='lying'?' ⬇':''}</span>`).join('');
+    el.classList.toggle('prio',!!(S.dispatch&&S.dispatch.priority_room===r))}
+  door.textContent=`Front door: ${S.door.locked?'locked':'unlocked'}${S.door.forced?' · FORCED':''} · speaker: ${S.guard_audio||'silent'} · Cyberwave bridge: ${S.cyberwave_online?'online':'offline (local twin)'}`;
+  disp.textContent=S.dispatch?JSON.stringify({emergency:S.dispatch.emergency,priority_room:S.dispatch.priority_room,occupied_rooms:S.dispatch.occupied_rooms,door:S.dispatch.door,reason:S.dispatch.reason},null,1):'—';
+  log.textContent=S.events.slice().reverse().map(e=>`${e.t.toFixed(1).padStart(7)}  ${e.source.padEnd(8)} ${e.kind.padEnd(10)} ${JSON.stringify(e.detail).slice(0,140)}`).join('\n')}
+setInterval(poll,1000);poll();frame();
+</script>
+</body>
+</html>
